@@ -1,0 +1,5 @@
+venv/
+__pycache__/
+garbage/
+src/frontend/react/node_modules/
+*.pytest_cache/
