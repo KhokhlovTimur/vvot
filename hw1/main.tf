@@ -7,6 +7,39 @@ terraform {
   required_version = ">= 0.13"
 }
 
+resource "yandex_iam_service_account" "func-bot-account-kte" {
+  name        = "func-bot-account-kte"
+  description = "Аккаунт для функции вебхука"
+  folder_id   = var.folder_id
+}
+
+resource "yandex_resourcemanager_folder_iam_binding" "mount-iam" {
+  folder_id = var.folder_id
+  role               = "storage.admin"
+
+  members = [
+    "serviceAccount:${yandex_iam_service_account.func-bot-account-kte.id}",
+  ]
+}
+
+resource "yandex_resourcemanager_folder_iam_binding" "ocr-iam" {
+  folder_id = var.folder_id
+  role               = "ai.vision.user"
+
+  members = [
+    "serviceAccount:${yandex_iam_service_account.func-bot-account-kte.id}",
+  ]
+}
+
+resource "yandex_resourcemanager_folder_iam_binding" "yagpt-iam" {
+  folder_id = var.folder_id
+  role               = "ai.languageModels.user"
+
+  members = [
+    "serviceAccount:${yandex_iam_service_account.func-bot-account-kte.id}",
+  ]
+}
+
 provider "yandex" {
   cloud_id = var.cloud_id
   folder_id = var.folder_id
@@ -26,12 +59,14 @@ resource "yandex_function" "handler_func" {
   entrypoint  = "index.handler"
   memory      = 128
   execution_timeout  = 20
+  service_account_id = yandex_iam_service_account.func-bot-account-kte.id
+
   environment = {
     "TG_API_KEY" = var.TG_API_KEY,
     "IMAGES_BUCKET" = yandex_storage_bucket.mount-bucket.bucket
   }
 
-  storage_mounts {
+    storage_mounts {
     mount_point_name = "images"
     bucket = yandex_storage_bucket.mount-bucket.bucket
     prefix           = ""
@@ -69,20 +104,20 @@ resource "yandex_function_iam_binding" "function-iam" {
 }
 
 
-# resource "null_resource" "triggers" {
-#   triggers = {
-#     api_key = var.TG_API_KEY
-#   }
-#
-#   provisioner "local-exec" {
-#     command = "curl --insecure -X POST https://api.telegram.org/bot${var.TG_API_KEY}/setWebhook?url=https://functions.yandexcloud.net/${yandex_function.handler_func.id}"
-#   }
-#
-#   provisioner "local-exec" {
-#     when    = destroy
-#     command = "curl --insecure -X POST https://api.telegram.org/bot${self.triggers.api_key}/deleteWebhook"
-#   }
-# }
+resource "null_resource" "triggers" {
+  triggers = {
+    api_key = var.TG_API_KEY
+  }
+
+  provisioner "local-exec" {
+    command = "curl --insecure -X POST https://api.telegram.org/bot${var.TG_API_KEY}/setWebhook?url=https://functions.yandexcloud.net/${yandex_function.handler_func.id}"
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "curl --insecure -X POST https://api.telegram.org/bot${self.triggers.api_key}/deleteWebhook"
+  }
+}
 
 
 variable "TG_API_KEY" {
