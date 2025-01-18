@@ -35,6 +35,34 @@ resource "yandex_storage_bucket" "mount-bucket" {
 }
 
 
+resource "yandex_resourcemanager_folder_iam_binding" "ocr-iam" {
+  folder_id = var.folder_id
+  role      = "ai.vision.user"
+
+  members = [
+    "serviceAccount:${yandex_iam_service_account.bot_acc.id}",
+  ]
+}
+
+resource "yandex_resourcemanager_folder_iam_binding" "yagpt-iam" {
+  folder_id = var.folder_id
+  role      = "ai.languageModels.user"
+
+  members = [
+    "serviceAccount:${yandex_iam_service_account.bot_acc.id}",
+  ]
+}
+
+resource "yandex_resourcemanager_folder_iam_binding" "func-admin-iam" {
+  folder_id = var.folder_id
+  role      = "serverless.functions.admin"
+
+  members = [
+    "serviceAccount:${yandex_iam_service_account.bot_acc.id}",
+  ]
+}
+
+
 variable "TG_API_KEY" {
   type = string
   description = "Ключ тг бота"
