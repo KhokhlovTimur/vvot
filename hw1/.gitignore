@@ -3,3 +3,4 @@ __pycache__/
 garbage/
 src/frontend/react/node_modules/
 *.pytest_cache/
+.env
