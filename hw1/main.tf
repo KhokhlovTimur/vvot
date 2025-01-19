@@ -7,6 +7,7 @@ terraform {
   required_version = ">= 0.13"
 }
 
+
 resource "yandex_iam_service_account" "func-bot-account-kte" {
   name        = "func-bot-account-kte"
   description = "Аккаунт для функции вебхука"
@@ -87,7 +88,6 @@ resource "archive_file" "zip" {
   output_path = "src.zip"
   source_file = "./handler/index.py"
 }
-
 
 resource "yandex_storage_object" "yagpt_setup" {
   bucket = yandex_storage_bucket.mount-bucket.id
