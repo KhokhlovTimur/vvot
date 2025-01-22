@@ -47,6 +47,7 @@ resource "yandex_function" "face-detection-handler" {
   entrypoint        = "face-detection-handler.handler"
   memory            = 128
   execution_timeout = 20
+  service_account_id = yandex_iam_service_account.func-bot-account-kte-faces.id
 
   environment = {
     "QUEUE_URL"             = yandex_message_queue.task_queue.id,
@@ -54,11 +55,9 @@ resource "yandex_function" "face-detection-handler" {
     "AWS_SECRET_ACCESS_KEY" = yandex_iam_service_account_static_access_key.queue-static-key.secret_key,
   }
 
-  service_account_id = yandex_iam_service_account.func-bot-account-kte-faces.id
-
   storage_mounts {
     mount_point_name = "images"
-    bucket           = yandex_storage_bucket.bucket-photos
+    bucket           = yandex_storage_bucket.bucket-photos.bucket
     prefix           = ""
   }
 
@@ -93,6 +92,44 @@ resource "yandex_function_trigger" "face-detection-handler_trigger" {
     delete       = false
     batch_cutoff = 2
   }
+}
+
+
+resource "yandex_function" "face-cut-handler" {
+  name              = "vvot16-face-cut"
+  user_hash         = archive_file.face-cut-handler-zip.output_sha256
+  runtime           = "python312"
+  entrypoint        = "face-cut-handler.handler"
+  memory            = 128
+  execution_timeout = 20
+  service_account_id = yandex_iam_service_account.func-bot-account-kte-faces.id
+
+  environment = {
+    "AWS_ACCESS_KEY_ID"     = yandex_iam_service_account_static_access_key.queue-static-key.access_key
+    "AWS_SECRET_ACCESS_KEY" = yandex_iam_service_account_static_access_key.queue-static-key.secret_key
+  }
+
+  storage_mounts {
+    mount_point_name = "images"
+    bucket           = yandex_storage_bucket.bucket-photos.bucket
+    prefix           = ""
+  }
+
+  storage_mounts {
+    mount_point_name = "faces"
+    bucket           = yandex_storage_bucket.bucket-faces.bucket
+    prefix           = ""
+  }
+
+  content {
+    zip_filename = archive_file.face-cut-handler-zip.output_path
+  }
+}
+
+resource "archive_file" "face-cut-handler-zip" {
+  type        = "zip"
+  output_path = "faces-src.zip"
+  source_dir  = "handlers/face-cut-handler.py"
 }
 
 
@@ -156,13 +193,48 @@ resource "yandex_message_queue" "task_queue" {
 }
 
 
+resource "yandex_ydb_database_serverless" "images-db" {
+  name                = "vvot16-images-db"
+  deletion_protection = false
+  serverless_database {
+    enable_throttling_rcu_limit = false
+    provisioned_rcu_limit       = 10
+    storage_size_limit          = 50
+    throttling_rcu_limit        = 0
+  }
+}
+
+resource "yandex_ydb_table" "image-face" {
+  path              = "image-face"
+  connection_string = yandex_ydb_database_serverless.images-db.ydb_full_endpoint
+
+  column {
+    name     = "ImageId"
+    type     = "String"
+    not_null = true
+  }
+  column {
+    name     = "FaceId"
+    type     = "String"
+    not_null = true
+  }
+  column {
+    name     = "FaceName"
+    type     = "String"
+    not_null = false
+  }
+
+  primary_key = ["FaceId"]
+}
+
+
 resource "null_resource" "triggers" {
   triggers = {
     api_key = var.TG_API_KEY
   }
 
   provisioner "local-exec" {
-    command = "curl --insecure -X POST https://api.telegram.org/bot${var.TG_API_KEY}/setWebhook?url=https://functions.yandexcloud.net/${yandex_function.handler_func.id}"
+    command = "curl --insecure -X POST https://api.telegram.org/bot${var.TG_API_KEY}/setWebhook?url=https://functions.yandexcloud.net/${yandex_function.tg-bot-handler.id}"
   }
 
   provisioner "local-exec" {
