@@ -41,18 +41,18 @@ resource "yandex_storage_bucket" "bucket-faces" {
 
 
 resource "yandex_function" "face-detection-handler" {
-  name              = "vvot16-face-detection"
-  user_hash         = archive_file.face-detection-handler-zip.output_base64sha256
-  runtime           = "python312"
-  entrypoint        = "face-detection-handler.handler"
-  memory            = 128
-  execution_timeout = 20
+  name               = "vvot16-face-detection"
+  user_hash          = archive_file.face-detection-handler-zip.output_base64sha256
+  runtime            = "python312"
+  entrypoint         = "face-detection-handler.handler"
+  memory             = 128
+  execution_timeout  = 20
   service_account_id = yandex_iam_service_account.func-bot-account-kte-faces.id
 
   environment = {
-    "QUEUE_URL"             = yandex_message_queue.task_queue.id,
-    "AWS_ACCESS_KEY_ID"     = yandex_iam_service_account_static_access_key.queue-static-key.access_key
-    "AWS_SECRET_ACCESS_KEY" = yandex_iam_service_account_static_access_key.queue-static-key.secret_key,
+    "QUEUE_URL"         = yandex_message_queue.task_queue.id,
+    "ACCESS_KEY_ID"     = yandex_iam_service_account_static_access_key.queue-static-key.access_key,
+    "SECRET_ACCESS_KEY" = yandex_iam_service_account_static_access_key.queue-static-key.secret_key
   }
 
   storage_mounts {
@@ -69,12 +69,12 @@ resource "yandex_function" "face-detection-handler" {
 resource "archive_file" "face-detection-handler-zip" {
   type        = "zip"
   output_path = "face-detection-handler.zip"
-  source_file = "./handlers/face-detection-handler.py"
+  source_dir  = "./face-detection"
 }
 
 
-resource "yandex_function_trigger" "face-detection-handler_trigger" {
-  name        = "vvot16-photos-trigger"
+resource "yandex_function_trigger" "face-detection-handler-trigger" {
+  name        = "vvot16-face-detection-handler-trigger"
   description = "Триггер для запуска обработчика face-detection-handler"
 
   function {
@@ -95,18 +95,35 @@ resource "yandex_function_trigger" "face-detection-handler_trigger" {
 }
 
 
+resource "yandex_iam_service_account_static_access_key" "queue-static-key" {
+  service_account_id = yandex_iam_service_account.func-bot-account-kte-faces.id
+  description        = "Ключ для очереди"
+}
+
+resource "yandex_message_queue" "task_queue" {
+  name                       = "vvot16-tasks"
+  access_key                 = yandex_iam_service_account_static_access_key.queue-static-key.access_key
+  secret_key                 = yandex_iam_service_account_static_access_key.queue-static-key.secret_key
+  visibility_timeout_seconds = 600
+  receive_wait_time_seconds  = 20
+  message_retention_seconds  = 1209600
+}
+
+
 resource "yandex_function" "face-cut-handler" {
-  name              = "vvot16-face-cut"
-  user_hash         = archive_file.face-cut-handler-zip.output_sha256
-  runtime           = "python312"
-  entrypoint        = "face-cut-handler.handler"
-  memory            = 128
-  execution_timeout = 20
+  name               = "vvot16-face-cut"
+  user_hash          = archive_file.face-cut-handler-zip.output_sha256
+  runtime            = "python312"
+  entrypoint         = "face-cut-handler.handler"
+  memory             = 128
+  execution_timeout  = 20
   service_account_id = yandex_iam_service_account.func-bot-account-kte-faces.id
 
   environment = {
-    "AWS_ACCESS_KEY_ID"     = yandex_iam_service_account_static_access_key.queue-static-key.access_key
-    "AWS_SECRET_ACCESS_KEY" = yandex_iam_service_account_static_access_key.queue-static-key.secret_key
+    "AWS_ACCESS_KEY_ID"     = yandex_iam_service_account_static_access_key.queue-static-key.access_key,
+    "AWS_SECRET_ACCESS_KEY" = yandex_iam_service_account_static_access_key.queue-static-key.secret_key,
+    "YDB_URL"               = yandex_ydb_database_serverless.images-db.ydb_api_endpoint,
+    "YDB_ENDPOINT"          = yandex_ydb_database_serverless.images-db.database_path
   }
 
   storage_mounts {
@@ -128,22 +145,42 @@ resource "yandex_function" "face-cut-handler" {
 
 resource "archive_file" "face-cut-handler-zip" {
   type        = "zip"
-  output_path = "faces-src.zip"
-  source_dir  = "handlers/face-cut-handler.py"
+  output_path = "face-cut-handler.zip"
+  source_dir  = "./face-cut"
+}
+
+resource "yandex_function_trigger" "cut-handler-trigger" {
+  name = "vvot16-task-cut-handler-trigger"
+
+  message_queue {
+    queue_id           = yandex_message_queue.task_queue.arn
+    batch_cutoff       = "5"
+    batch_size         = "5"
+    service_account_id = yandex_iam_service_account.func-bot-account-kte-faces.id
+  }
+
+  function {
+    id                 = yandex_function.face-cut-handler.id
+    service_account_id = yandex_iam_service_account.func-bot-account-kte-faces.id
+  }
 }
 
 
 resource "yandex_function" "tg-bot-handler" {
-  name              = "vvot16-boot"
-  user_hash         = archive_file.tg-bot-handler-zip.output_sha256
-  runtime           = "python312"
-  entrypoint        = "tg-bot-handler.handler"
-  memory            = 128
-  execution_timeout = 20
-  environment = {
-    "TG_API_KEY" = var.TG_API_KEY
-  }
+  name               = "vvot16-boot"
+  user_hash          = archive_file.tg-bot-handler-zip.output_sha256
+  runtime            = "python312"
+  entrypoint         = "tg-bot-handler.handler"
+  memory             = 128
+  execution_timeout  = 20
   service_account_id = yandex_iam_service_account.func-bot-account-kte-faces.id
+
+  environment = {
+    "TG_API_KEY"   = var.TG_API_KEY
+    "API_GW_URL"   = yandex_api_gateway.api-gateway.domain
+    "YDB_URL"      = yandex_ydb_database_serverless.images-db.ydb_api_endpoint,
+    "YDB_ENDPOINT" = yandex_ydb_database_serverless.images-db.database_path
+  }
 
   storage_mounts {
     mount_point_name = "faces"
@@ -164,8 +201,8 @@ resource "yandex_function" "tg-bot-handler" {
 
 resource "archive_file" "tg-bot-handler-zip" {
   type        = "zip"
-  output_path = "bot_src.zip"
-  source_dir  = "./handlers/tg-bot-handler.py"
+  output_path = "tg-bot-handler.zip"
+  source_dir  = "./bot"
 }
 
 resource "yandex_function_iam_binding" "function-iam" {
@@ -178,24 +215,10 @@ resource "yandex_function_iam_binding" "function-iam" {
 }
 
 
-resource "yandex_iam_service_account_static_access_key" "queue-static-key" {
-  service_account_id = yandex_iam_service_account.func-bot-account-kte-faces.id
-  description        = "Ключ для очереди"
-}
-
-resource "yandex_message_queue" "task_queue" {
-  name                       = "vvot16-task"
-  access_key                 = yandex_iam_service_account_static_access_key.queue-static-key.access_key
-  secret_key                 = yandex_iam_service_account_static_access_key.queue-static-key.secret_key
-  visibility_timeout_seconds = 600
-  receive_wait_time_seconds  = 20
-  message_retention_seconds  = 1209600
-}
-
-
 resource "yandex_ydb_database_serverless" "images-db" {
-  name                = "vvot16-images-db"
+  name                = "vvot16-db-photo-face"
   deletion_protection = false
+
   serverless_database {
     enable_throttling_rcu_limit = false
     provisioned_rcu_limit       = 10
@@ -204,8 +227,8 @@ resource "yandex_ydb_database_serverless" "images-db" {
   }
 }
 
-resource "yandex_ydb_table" "image-face" {
-  path              = "image-face"
+resource "yandex_ydb_table" "image_face" {
+  path              = "image_face"
   connection_string = yandex_ydb_database_serverless.images-db.ydb_full_endpoint
 
   column {
@@ -213,18 +236,105 @@ resource "yandex_ydb_table" "image-face" {
     type     = "String"
     not_null = true
   }
+
   column {
     name     = "FaceId"
     type     = "String"
     not_null = true
   }
+
   column {
     name     = "FaceName"
     type     = "String"
     not_null = false
   }
 
+  column {
+    name = "Processing"
+    type = "String"
+    not_null = false
+  }
+
   primary_key = ["FaceId"]
+}
+
+
+resource "yandex_function" "api-gateway" {
+  name               = "vvot16-api-gw"
+  user_hash          = archive_file.api-gateway-zip.output_sha256
+  runtime            = "python312"
+  entrypoint         = "api.handler"
+  memory             = 128
+  execution_timeout  = 20
+  service_account_id = yandex_iam_service_account.func-bot-account-kte-faces.id
+
+  storage_mounts {
+    mount_point_name = "faces"
+    bucket           = yandex_storage_bucket.bucket-faces.bucket
+    prefix           = ""
+  }
+
+  storage_mounts {
+    mount_point_name = "images"
+    bucket           = yandex_storage_bucket.bucket-photos.bucket
+    prefix           = ""
+  }
+
+  content {
+    zip_filename = archive_file.api-gateway-zip.output_path
+  }
+}
+
+resource "archive_file" "api-gateway-zip" {
+  type        = "zip"
+  output_path = "api-gateway.zip"
+  source_dir  = "./api"
+}
+
+
+resource "yandex_api_gateway" "api-gateway" {
+  name        = "vvot16-apigw"
+  description = "API для получения лиц"
+
+  labels = {
+    label       = "label"
+    empty-label = ""
+  }
+
+  spec = <<-EOT
+    openapi: "3.0.0"
+    info:
+      version: 1.0.0
+      title: Face API
+    paths:
+      /:
+        get:
+          summary: API для получения лиц
+          parameters:
+            - name: face
+              in: query
+              required: false
+              schema:
+                type: string
+            - name: image
+              in: query
+              required: false
+              schema:
+                type: string
+          responses:
+            "200":
+              description: Image
+              content:
+                image/jpeg:
+                  schema:
+                    type: string
+                    format: binary
+          x-yc-apigateway-integration:
+            type: cloud_functions
+            function_id: ${yandex_function.api-gateway.id}
+            tag: $latest
+            service_account_id: ${yandex_iam_service_account.func-bot-account-kte-faces.id}
+  EOT
 }
 
 
