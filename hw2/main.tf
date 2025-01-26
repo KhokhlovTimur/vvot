@@ -260,7 +260,7 @@ resource "yandex_ydb_table" "image_face" {
 
 
 resource "yandex_function" "api-gateway" {
-  name               = "vvot16-api-gw"
+  name               = "vvot16-apigw"
   user_hash          = archive_file.api-gateway-zip.output_sha256
   runtime            = "python312"
   entrypoint         = "api.handler"

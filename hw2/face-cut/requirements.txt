@@ -1,0 +1,3 @@
+ydb
+Pillow
+opencv-python-headless

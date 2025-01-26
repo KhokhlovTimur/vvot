@@ -40,7 +40,7 @@ def handler(event, req):
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         #blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=6, minSize=(30, 30))
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.2, minNeighbors=5, minSize=(30, 30), flags=cv2.CASCADE_SCALE_IMAGE)
 
         print(f"faces - {faces}")
 
