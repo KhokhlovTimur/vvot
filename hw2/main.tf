@@ -154,7 +154,7 @@ resource "archive_file" "face-cut-handler-zip" {
 }
 
 resource "yandex_function_trigger" "cut-handler-trigger" {
-  name = "vvot16-task-cut-handler-trigger"
+  name = "vvot16-task"
 
   message_queue {
     queue_id           = yandex_message_queue.task_queue.arn
