@@ -1,0 +1,64 @@
+---
+- name: Nextcloud
+  hosts: web-server
+
+  tasks:
+    - name: Timezone settings
+      community.general.timezone:
+        name: Europe/Moscow
+
+    - name: Upgrade cache
+      apt:
+        update_cache: yes
+        upgrade: "yes"
+
+    - name: Install Packages
+      ansible.builtin.apt:
+        pkg:
+          - apache2
+          - libapache2-mod-php
+          - php-curl
+          - php-gd
+          - acl
+          - php-json
+          - php-mbstring
+          - php-xml
+          - php-zip
+          - php-intl
+          - php-mysql
+          - php-pgsql
+          - php-bcmath
+          - python3-pip
+          - unzip
+          - postgresql-all
+          - bzip2
+          - wget
+        state: present
+    - name: Install psycopg2
+      ansible.builtin.pip:
+        extra_args: "--break-system-packages"
+        name: psycopg2
+    - name: Download and unpack Nextcloud
+      ansible.builtin.unarchive:
+        dest: "/var/www/html"
+        src: "https://download.nextcloud.com/server/releases/latest-30.tar.bz2"
+        remote_src: true
+        owner: "www-data"
+        group: "www-data"
+        creates: "/var/www/html/nextcloud"
+
+    - name: PostgreSQL user
+      become: true
+      become_user: postgres
+      community.postgresql.postgresql_user:
+        name: user
+        password: password
+
+    - name: PostgreSQL DB
+      become: true
+      become_user: postgres
+      community.postgresql.postgresql_db:
+        name: nextcloud
+        owner: user
+
+

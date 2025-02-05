@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+garbage/
+src/frontend/react/node_modules/
+*.pytest_cache/
+.env
+terraform.tfvars
+.terraform
+terraform.tfstate
+.terraform.lock.hcl
+terraform.tfstate.backup
+.idea
